@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>고파이 채권 잔량 현황 — 실시간</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: #1e2d47;
+    --accent: #3b82f6;
+    --accent2: #22d3ee;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #475569;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  /* background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .header-left h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+
+  .header-left .subtitle {
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text2);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 5px 10px;
+    border-radius: 20px;
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text3);
+  }
+  .dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+  .dot.loading { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: pulse 1s infinite; }
+  .dot.error { background: var(--red); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .refresh-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* EXCHANGE RATE BAR */
+  .rate-bar {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+
+  .rate-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text2);
+  }
+
+  .rate-item .label { color: var(--text3); }
+  .rate-item .value {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent2);
+    font-weight: 600;
+  }
+
+  .rate-divider { width: 1px; height: 14px; background: var(--border); }
+
+  /* SUMMARY CARDS */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .summary-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .summary-card.blue::before { background: linear-gradient(90deg, var(--accent), transparent); }
+  .summary-card.cyan::before { background: linear-gradient(90deg, var(--accent2), transparent); }
+  .summary-card.green::before { background: linear-gradient(90deg, var(--green), transparent); }
+
+  .summary-card .card-label {
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .summary-card .card-value {
+    font-size: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .summary-card .card-sub {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* SECTION */
+  .section { margin-bottom: 24px; }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* TABLE */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    padding: 10px 14px;
+    text-align: right;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  thead th:first-child { text-align: left; }
+  thead th:nth-child(2) { text-align: left; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background .15s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+
+  tbody td {
+    padding: 10px 14px;
+    text-align: right;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  tbody td:first-child { text-align: left; }
+  tbody td:nth-child(2) { text-align: left; }
+
+  .token-symbol {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent2);
+    background: rgba(34,211,238,0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+    min-width: 50px;
+    text-align: center;
+  }
+
+  .token-name { color: var(--text2); font-size: 13px; }
+
+  .price-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .price-change {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 1px;
+  }
+  .price-change.up { color: var(--green); }
+  .price-change.down { color: var(--red); }
+
+  .amount-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .qty-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text2);
+  }
+
+  .subtotal-row td {
+    background: rgba(59,130,246,0.05);
+    font-weight: 600;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    border-top: 1px solid var(--border) !important;
+  }
+
+  .total-row td {
+    background: rgba(59,130,246,0.1);
+    font-weight: 700;
+    color: var(--accent2);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    border-top: 1px solid var(--accent) !important;
+  }
+
+  .type-badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .type-badge.fixed { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.2); }
+  .type-badge.flex  { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface2), var(--border), var(--surface2));
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+    height: 14px;
+    display: inline-block;
+    width: 80px;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .error-msg {
+    font-size: 11px;
+    color: var(--red);
+    font-family: 'JetBrains Mono', monospace;
+    opacity: 0.7;
+  }
+
+  .footnote {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    line-height: 1.7;
+  }
+
+  .last-update {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: 'JetBrains Mono', monospace;
+    text-align: right;
+    margin-top: 16px;
+  }
+
+  /* 두번째 테이블: 바이낸스 */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  .mini-table table { font-size: 12px; }
+  .mini-table thead th { padding: 8px 12px; }
+  .mini-table tbody td { padding: 8px 12px; }
+
+  .diff-pos { color: var(--green); }
+  .diff-neg { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="header-left">
+      <h1>고파이 채권 잔량 현황</h1>
+      <div class="subtitle">26년 1월말 잔량 기준 · 실시간 시세 자동반영</div>
+    </div>
+    <div class="header-right">
+      <div class="status-badge">
+        <div class="dot" id="statusDot"></div>
+        <span id="statusText">연결 대기중...</span>
+      </div>
+      <button class="refresh-btn" onclick="fetchAndUpdate()">⟳ 새로고침</button>
+    </div>
+  </header>
+
+  <!-- 환율 & 시세 바 -->
+  <div class="rate-bar" id="rateBar">
+    <div class="rate-item">
+      <span class="label">USD/KRW</span>
+      <span class="value" id="exchangeRate">—</span>
+    </div>
+    <div class="rate-divider"></div>
+    <div class="rate-item">
+      <span class="label">BTC</span>
+      <span class="value" id="btcUsd">—</span>
+    </div>
+    <div class="rate-divider"></div>
+    <div class="rate-item">
+      <span class="label">ETH</span>
+      <span class="value" id="ethUsd">—</span>
+    </div>
+    <div class="rate-divider"></div>
+    <div class="rate-item">
+      <span class="label">SOL</span>
+      <span class="value" id="solUsd">—</span>
+    </div>
+    <div class="rate-divider"></div>
+    <div class="rate-item">
+      <span class="label">데이터 출처</span>
+      <span class="value" style="color:var(--text3)">CoinGecko · ExchangeRate-API</span>
+    </div>
+  </div>
+
+  <!-- 요약 카드 -->
+  <div class="summary-grid">
+    <div class="summary-card blue">
+      <div class="card-label">고파이 채권 총액</div>
+      <div class="card-value" id="totalGopai">—</div>
+      <div class="card-sub" id="totalGopaiChange">계산 중...</div>
+    </div>
+    <div class="summary-card cyan">
+      <div class="card-label">바이낸스 채권 총액</div>
+      <div class="card-value" id="totalBinance">—</div>
+      <div class="card-sub" id="totalBinanceChange">계산 중...</div>
+    </div>
+    <div class="summary-card green">
+      <div class="card-label">합산 채권 총액</div>
+      <div class="card-value" id="totalAll">—</div>
+      <div class="card-sub" id="totalAllChange">계산 중...</div>
+    </div>
+  </div>
+
+  <!-- 고파이 채권 -->
+  <div class="section">
+    <div class="section-title">고파이 채권 잔량</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>유형</th>
+            <th>토큰</th>
+            <th>현재 시세 (원)</th>
+            <th>기준일 시세 (원)</th>
+            <th>수량</th>
+            <th>현재 금액 (원)</th>
+          </tr>
+        </thead>
+        <tbody id="gopaiTableBody"></tbody>
+      </table>
+    </div>
+    <div class="footnote">
+      * 고정형: 이자 지급형 예치상품으로 지급이 지연될수록 이자만큼 잔량이 증가<br>
+      ** 기준일 시세: 26.02.20 기준 코인마켓캡 USD 시세 × 전신환매입률(1,432원)
+    </div>
+  </div>
+
+  <!-- 비교 테이블 -->
+  <div class="section">
+    <div class="section-title">고파이 vs. 크립토바스켓 비교</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>토큰</th>
+            <th>현재 시세 (원)</th>
+            <th>고파이 채권 수량</th>
+            <th>고파이 채권 금액 (원)</th>
+            <th>크립토바스켓 수량</th>
+            <th>과부족 금액 (원)</th>
+          </tr>
+        </thead>
+        <tbody id="compareTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 바이낸스 채권 -->
+  <div class="section">
+    <div class="section-title">바이낸스 채권 잔량 (1차 IRI 상환자금)</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>토큰</th>
+            <th>현재 시세 (원)</th>
+            <th>기준일 시세 (원)</th>
+            <th>수량</th>
+            <th>현재 금액 (원)</th>
+          </tr>
+        </thead>
+        <tbody id="binanceTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="last-update">마지막 업데이트: <span id="lastUpdateTime">—</span> · 5분마다 자동 갱신</div>
+
+</div>
+
+<script>
+// ─── 원본 데이터 (수량은 원본 파일 기준 고정값) ─────────────────────
+const REFERENCE_DATE = '26.02.20';
+const REFERENCE_RATE = 1432; // 기준일 전신환매입률
+
+// 기준일 USD 시세 (CoinMarketCap 26.02.20 기준)
+const REF_USD = {
+  USDC: 1, BTC: 67900, ETH: 1965, MATIC: 0.1, BCH: 561,
+  XLM: 0.16, LINK: 9, UNI: 3.4, AAVE: 124, COMP: 17.77, SOL: 84
+};
+
+// 고파이 채권 수량
+const GOPAI_FIXED = [
+  { sym: 'USDC', name: 'USDC',   qty: 637891   },
+  { sym: 'BTC',  name: '비트코인', qty: 631       },
+  { sym: 'ETH',  name: '이더리움', qty: 4680      },
+  { sym: 'MATIC',name: '폴리곤',  qty: 76007     },
+];
+const GOPAI_FLEX = [
+  { sym: 'BTC',  name: '비트코인',  qty: 148      },
+  { sym: 'ETH',  name: '이더리움',  qty: 1096     },
+  { sym: 'BCH',  name: '비트코인캐시',qty: 6417.93},
+  { sym: 'XLM',  name: '스텔라루멘', qty: 12023921},
+  { sym: 'LINK', name: '체인링크',  qty: 9867.76  },
+  { sym: 'UNI',  name: '유니스왑',  qty: 1946.99  },
+  { sym: 'AAVE', name: '에이브',    qty: 141.62   },
+  { sym: 'COMP', name: '컴파운드',  qty: 9.99     },
+  { sym: 'SOL',  name: '솔라나',    qty: 1493.77  },
+  { sym: 'USDC', name: 'USDC',     qty: 74365    },
+  { sym: 'MATIC',name: '폴리곤',   qty: 1        },
+];
+const BINANCE = [
+  { sym: 'AAVE', name: '에이브',     qty: 21       },
+  { sym: 'BCH',  name: '비트코인캐시',qty: 12608    },
+  { sym: 'BTC',  name: '비트코인',   qty: 258      },
+  { sym: 'COMP', name: '컴파운드',   qty: 10       },
+  { sym: 'ETH',  name: '이더리움',   qty: 1452     },
+  { sym: 'LINK', name: '체인링크',   qty: 17420    },
+  { sym: 'SOL',  name: '솔라나',     qty: 2116     },
+  { sym: 'UNI',  name: '유니스왑',   qty: 1655     },
+  { sym: 'USDC', name: 'USDC',      qty: 1279814  },
+  { sym: 'XLM',  name: '스텔라루멘', qty: 35504705 },
+];
+const COMPARE = [
+  { sym: 'USDC', name: 'USDC',     gopaiQty: 712256,  basketQty: 706184.46 },
+  { sym: 'BTC',  name: '비트코인', gopaiQty: 779,      basketQty: 775.11    },
+  { sym: 'ETH',  name: '이더리움', gopaiQty: 5776,     basketQty: 5766.63   },
+  { sym: 'MATIC',name: '폴리곤',   gopaiQty: 76008,    basketQty: 75467.58  },
+  { sym: 'BCH',  name: '비트코인캐시',gopaiQty: 6417.93,basketQty: 6417.93  },
+  { sym: 'XLM',  name: '스텔라루멘',gopaiQty: 12023921,basketQty: 12042805.97},
+  { sym: 'LINK', name: '체인링크', gopaiQty: 9867.76,  basketQty: 9867.76   },
+  { sym: 'UNI',  name: '유니스왑', gopaiQty: 1946.99,  basketQty: 1946.99   },
+  { sym: 'AAVE', name: '에이브',   gopaiQty: 141.62,   basketQty: 141.62    },
+  { sym: 'COMP', name: '컴파운드', gopaiQty: 9.99,     basketQty: 9.99      },
+  { sym: 'SOL',  name: '솔라나',   gopaiQty: 1493.77,  basketQty: 1493.77   },
+];
+
+// CoinGecko ID 매핑
+const GECKO_IDS = {
+  USDC: 'usd-coin', BTC: 'bitcoin', ETH: 'ethereum',
+  MATIC: 'matic-network', BCH: 'bitcoin-cash', XLM: 'stellar',
+  LINK: 'chainlink', UNI: 'uniswap', AAVE: 'aave', COMP: 'compound-governance-token',
+  SOL: 'solana'
+};
+
+let currentPricesUSD = {};
+let currentExchangeRate = REFERENCE_RATE;
+let isLoading = false;
+
+// ─── 포맷 유틸 ─────────────────────────────────────────────────────
+const fmt = (n) => {
+  if (n === undefined || n === null || isNaN(n)) return '—';
+  if (Math.abs(n) >= 1e12) return (n/1e12).toFixed(2) + '조';
+  if (Math.abs(n) >= 1e8)  return (n/1e8).toFixed(1) + '억';
+  return Math.round(n).toLocaleString('ko-KR');
+};
+const fmtKrw = (n) => {
+  if (!n && n !== 0) return '—';
+  if (Math.abs(n) >= 1e12) return '₩' + (n/1e12).toFixed(3) + '조';
+  if (Math.abs(n) >= 1e8)  return '₩' + (n/1e8).toFixed(1) + '억';
+  return '₩' + Math.round(n).toLocaleString('ko-KR');
+};
+const fmtPrice = (n) => {
+  if (!n && n !== 0) return '—';
+  if (n >= 1e6) return n.toLocaleString('ko-KR', {maximumFractionDigits: 0});
+  if (n >= 1000) return n.toLocaleString('ko-KR', {maximumFractionDigits: 1});
+  if (n >= 1) return n.toFixed(2);
+  return n.toFixed(4);
+};
+const fmtQty = (n) => {
+  if (n >= 1e6) return n.toLocaleString('ko-KR', {maximumFractionDigits: 0});
+  if (n >= 1) return n.toLocaleString('ko-KR', {maximumFractionDigits: 2});
+  return n.toFixed(4);
+};
+const pct = (cur, ref) => {
+  if (!ref || !cur) return null;
+  return ((cur - ref) / ref * 100).toFixed(2);
+};
+
+// ─── 기준일 KRW 시세 ────────────────────────────────────────────────
+const refKrw = (sym) => REF_USD[sym] * REFERENCE_RATE;
+
+// ─── 현재 KRW 시세 ──────────────────────────────────────────────────
+const curKrw = (sym) => {
+  const usd = currentPricesUSD[sym];
+  if (!usd) return refKrw(sym); // fallback
+  return usd * currentExchangeRate;
+};
+
+// ─── 가격 변화 표시 ──────────────────────────────────────────────────
+const changeBadge = (sym) => {
+  const ref = refKrw(sym);
+  const cur = curKrw(sym);
+  const p = pct(cur, ref);
+  if (!p) return '';
+  const dir = parseFloat(p) >= 0 ? 'up' : 'down';
+  const arrow = parseFloat(p) >= 0 ? '▲' : '▼';
+  return `<div class="price-change ${dir}">${arrow} ${Math.abs(p)}%</div>`;
+};
+
+// ─── 데이터 패치 ───────────────────────────────────────────────────
+async function fetchAndUpdate() {
+  if (isLoading) return;
+  isLoading = true;
+  setStatus('loading', '데이터 로딩 중...');
+
+  try {
+    // 1. 환율 (USD→KRW) — ExchangeRate-API
+    let rate = REFERENCE_RATE;
+    try {
+      const rateRes = await fetch('https://open.er-api.com/v6/latest/USD');
+      if (rateRes.ok) {
+        const rateData = await rateRes.json();
+        rate = rateData.rates?.KRW || REFERENCE_RATE;
+        currentExchangeRate = rate;
+      }
+    } catch(e) {
+      // fallback: try another free API
+      try {
+        const r2 = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        if (r2.ok) {
+          const d2 = await r2.json();
+          rate = d2.rates?.KRW || REFERENCE_RATE;
+          currentExchangeRate = rate;
+        }
+      } catch(e2) { /* use reference rate */ }
+    }
+
+    // 2. 코인 시세 — CoinGecko
+    const allIds = [...new Set(Object.values(GECKO_IDS))].join(',');
+    const cgRes = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${allIds}&vs_currencies=usd`
+    );
+    if (!cgRes.ok) throw new Error('CoinGecko API error');
+    const cgData = await cgRes.json();
+
+    for (const [sym, geckoId] of Object.entries(GECKO_IDS)) {
+      if (cgData[geckoId]?.usd) {
+        currentPricesUSD[sym] = cgData[geckoId].usd;
+      }
+    }
+
+    // 3. 화면 업데이트
+    renderAll();
+    setStatus('live', '실시간 · ' + new Date().toLocaleTimeString('ko-KR'));
+
+  } catch(e) {
+    console.warn('API fetch error:', e);
+    // fallback: use reference prices
+    for (const [sym, usd] of Object.entries(REF_USD)) {
+      if (!currentPricesUSD[sym]) currentPricesUSD[sym] = usd;
+    }
+    renderAll();
+    setStatus('error', '오프라인 — 기준일 시세 사용 중');
+  } finally {
+    isLoading = false;
+  }
+}
+
+function setStatus(type, msg) {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  dot.className = 'dot ' + type;
+  text.textContent = msg;
+  document.getElementById('lastUpdateTime').textContent = new Date().toLocaleString('ko-KR');
+}
+
+// ─── 렌더링 ────────────────────────────────────────────────────────
+function renderAll() {
+  renderRateBar();
+  renderGopaiTable();
+  renderCompareTable();
+  renderBinanceTable();
+  renderSummary();
+}
+
+function renderRateBar() {
+  document.getElementById('exchangeRate').textContent =
+    currentExchangeRate.toLocaleString('ko-KR', {maximumFractionDigits: 1}) + '원';
+  document.getElementById('btcUsd').textContent =
+    '$' + (currentPricesUSD.BTC || '—').toLocaleString?.('en-US', {maximumFractionDigits: 0}) || '—';
+  document.getElementById('ethUsd').textContent =
+    '$' + (currentPricesUSD.ETH || '—').toLocaleString?.('en-US', {maximumFractionDigits: 0}) || '—';
+  document.getElementById('solUsd').textContent =
+    '$' + (currentPricesUSD.SOL || '—').toLocaleString?.('en-US', {maximumFractionDigits: 0}) || '—';
+}
+
+function renderGopaiTable() {
+  const tbody = document.getElementById('gopaiTableBody');
+  let rows = '';
+  let fixedTotal = 0, flexTotal = 0;
+
+  // 고정형
+  let firstFixed = true;
+  for (const item of GOPAI_FIXED) {
+    const price = curKrw(item.sym);
+    const refPrice = refKrw(item.sym);
+    const amount = price * item.qty;
+    fixedTotal += amount;
+    rows += `<tr>
+      <td>${firstFixed ? '<span class="type-badge fixed">고정형</span>' : ''}</td>
+      <td><span class="token-symbol">${item.sym}</span> <span class="token-name">${item.name}</span></td>
+      <td class="price-cell">${fmtPrice(price)}원${changeBadge(item.sym)}</td>
+      <td class="price-cell" style="color:var(--text3)">${fmtPrice(refPrice)}원</td>
+      <td class="qty-cell">${fmtQty(item.qty)}</td>
+      <td class="amount-cell">${fmtKrw(amount)}</td>
+    </tr>`;
+    firstFixed = false;
+  }
+  rows += `<tr class="subtotal-row">
+    <td></td><td colspan="4" style="text-align:left">고정형 소계</td>
+    <td>${fmtKrw(fixedTotal)}</td>
+  </tr>`;
+
+  // 자유형
+  let firstFlex = true;
+  for (const item of GOPAI_FLEX) {
+    const price = curKrw(item.sym);
+    const refPrice = refKrw(item.sym);
+    const amount = price * item.qty;
+    flexTotal += amount;
+    rows += `<tr>
+      <td>${firstFlex ? '<span class="type-badge flex">자유형</span>' : ''}</td>
+      <td><span class="token-symbol">${item.sym}</span> <span class="token-name">${item.name}</span></td>
+      <td class="price-cell">${fmtPrice(price)}원${changeBadge(item.sym)}</td>
+      <td class="price-cell" style="color:var(--text3)">${fmtPrice(refPrice)}원</td>
+      <td class="qty-cell">${fmtQty(item.qty)}</td>
+      <td class="amount-cell">${fmtKrw(amount)}</td>
+    </tr>`;
+    firstFlex = false;
+  }
+  rows += `<tr class="subtotal-row">
+    <td></td><td colspan="4" style="text-align:left">자유형 소계</td>
+    <td>${fmtKrw(flexTotal)}</td>
+  </tr>`;
+
+  const total = fixedTotal + flexTotal;
+  rows += `<tr class="total-row">
+    <td></td><td colspan="4" style="text-align:left">합계</td>
+    <td>${fmtKrw(total)}</td>
+  </tr>`;
+
+  tbody.innerHTML = rows;
+  window._gopaiTotal = total;
+}
+
+function renderCompareTable() {
+  const tbody = document.getElementById('compareTableBody');
+  let rows = '';
+  let totalGopai = 0, totalDiff = 0;
+
+  COMPARE.forEach((item, i) => {
+    const price = curKrw(item.sym);
+    const gopaiAmt = price * item.gopaiQty;
+    const basketAmt = price * item.basketQty;
+    const diff = basketAmt - gopaiAmt;
+    totalGopai += gopaiAmt;
+    totalDiff += diff;
+
+    const diffClass = diff >= 0 ? 'diff-pos' : 'diff-neg';
+    const diffSign = diff >= 0 ? '+' : '';
+    rows += `<tr>
+      <td style="color:var(--text3)">${i+1}</td>
+      <td><span class="token-symbol">${item.sym}</span> <span class="token-name">${item.name}</span></td>
+      <td class="price-cell">${fmtPrice(price)}원${changeBadge(item.sym)}</td>
+      <td class="qty-cell">${fmtQty(item.gopaiQty)}</td>
+      <td class="amount-cell">${fmtKrw(gopaiAmt)}</td>
+      <td class="qty-cell">${fmtQty(item.basketQty)}</td>
+      <td class="amount-cell ${diffClass}">${diffSign}${fmtKrw(diff)}</td>
+    </tr>`;
+  });
+
+  const diffClass = totalDiff >= 0 ? 'diff-pos' : 'diff-neg';
+  const diffSign = totalDiff >= 0 ? '+' : '';
+  rows += `<tr class="total-row">
+    <td></td>
+    <td colspan="3" style="text-align:left">합계</td>
+    <td>${fmtKrw(totalGopai)}</td>
+    <td></td>
+    <td class="${diffClass}">${diffSign}${fmtKrw(totalDiff)}</td>
+  </tr>`;
+
+  tbody.innerHTML = rows;
+  window._gopaiTotal = totalGopai;
+}
+
+function renderBinanceTable() {
+  const tbody = document.getElementById('binanceTableBody');
+  let rows = '';
+  let total = 0;
+
+  for (const item of BINANCE) {
+    const price = curKrw(item.sym);
+    const refPrice = refKrw(item.sym);
+    const amount = price * item.qty;
+    total += amount;
+    rows += `<tr>
+      <td><span class="token-symbol">${item.sym}</span> <span class="token-name">${item.name}</span></td>
+      <td class="price-cell">${fmtPrice(price)}원${changeBadge(item.sym)}</td>
+      <td class="price-cell" style="color:var(--text3)">${fmtPrice(refPrice)}원</td>
+      <td class="qty-cell">${fmtQty(item.qty)}</td>
+      <td class="amount-cell">${fmtKrw(amount)}</td>
+    </tr>`;
+  }
+  rows += `<tr class="total-row">
+    <td colspan="4" style="text-align:left">합계</td>
+    <td>${fmtKrw(total)}</td>
+  </tr>`;
+
+  tbody.innerHTML = rows;
+  window._binanceTotal = total;
+}
+
+function renderSummary() {
+  // 기준일 총액
+  const refGopaiTotal = calcRefTotal([...GOPAI_FIXED, ...GOPAI_FLEX]);
+  const refBinanceTotal = calcRefTotal(BINANCE);
+  const refAllTotal = refGopaiTotal + refBinanceTotal;
+
+  // 현재 총액
+  const curGopaiTotal = calcCurTotal([...GOPAI_FIXED, ...GOPAI_FLEX]);
+  const curBinanceTotal = calcCurTotal(BINANCE);
+  const curAllTotal = curGopaiTotal + curBinanceTotal;
+
+  document.getElementById('totalGopai').textContent = fmtKrw(curGopaiTotal);
+  document.getElementById('totalBinance').textContent = fmtKrw(curBinanceTotal);
+  document.getElementById('totalAll').textContent = fmtKrw(curAllTotal);
+
+  const gopaiDiff = curGopaiTotal - refGopaiTotal;
+  const binanceDiff = curBinanceTotal - refBinanceTotal;
+  const allDiff = curAllTotal - refAllTotal;
+
+  document.getElementById('totalGopaiChange').textContent =
+    `기준일 대비 ${gopaiDiff >= 0 ? '+' : ''}${fmtKrw(gopaiDiff)}`;
+  document.getElementById('totalBinanceChange').textContent =
+    `기준일 대비 ${binanceDiff >= 0 ? '+' : ''}${fmtKrw(binanceDiff)}`;
+  document.getElementById('totalAllChange').textContent =
+    `기준일 대비 ${allDiff >= 0 ? '+' : ''}${fmtKrw(allDiff)}`;
+}
+
+function calcRefTotal(items) {
+  return items.reduce((sum, item) => sum + refKrw(item.sym) * item.qty, 0);
+}
+function calcCurTotal(items) {
+  return items.reduce((sum, item) => sum + curKrw(item.sym) * item.qty, 0);
+}
+
+// ─── 초기화 & 자동 갱신 ─────────────────────────────────────────────
+fetchAndUpdate();
+setInterval(fetchAndUpdate, 5 * 60 * 1000); // 5분마다 자동 갱신
+</script>
+</body>
+</html>
